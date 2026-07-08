@@ -17,12 +17,13 @@ from google import genai
 def get_api_key():
     for name in ("GEMINI_API_KEY", "GENAI_API_KEY"):
         key = os.environ.get(name)
+        if not key:
+            try:
+                key = st.secrets[name]
+            except Exception:
+                key = None
         if key:
             return key
-        try:
-            return st.secrets[name]
-        except Exception:
-            continue
     return None
 
 
