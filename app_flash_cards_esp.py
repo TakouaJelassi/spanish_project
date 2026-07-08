@@ -2,6 +2,7 @@
 # FILE NAME: app.py
 # ==========================================
 
+import os
 import streamlit as st
 import google.generativeai as genai
 import json
@@ -67,15 +68,32 @@ st.write("Generate custom flashcards with sentences based on any theme or lesson
 # 1. Input for the lesson/theme
 lesson = st.text_input("What lesson or theme do you want to study? (e.g., 'At the airport', 'Past tense verbs')")
 
-# 2. Button to trigger the generation
+# 2. Optional hidden input for API key (local override)
+# api_key_input = st.text_input("API key (leave blank to use environment/Streamlit secrets)", type="password")
+
+def _get_api_key():
+    
+    env_key = os.getenv("GENAI_API_KEY")
+    if env_key:
+        return env_key
+    try:
+        return st.secrets["GENAI_API_KEY"]
+    except Exception:
+        return None
+
+# 3. Button to trigger the generation
 if st.button("Generate Flashcards"):
     if not lesson:
         st.error("Please enter a lesson or theme.")
     else:
-        try:
-            st.session_state.flashcards = fetch_flashcards(lesson, 'AIzaSyCb_fQ9Csc8Tm5wlGhWsf4r0vm7ZXYLUQs')
-            st.session_state.current_index = 0
-            st.session_state.show_spanish = False
-            st.success("Flashcards ready! The deck is randomized from Gemini.")
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
+        api_key = _get_api_key()
+        if not api_key:
+            st.error("API key not found. Set the GENAI_API_KEY environment variable, add it to Streamlit secrets under 'GENAI_API_KEY', or enter it above.")
+        else:
+            try:
+                st.session_state.flashcards = fetch_flashcards(lesson, api_key)
+                st.session_state.current_index = 0
+                st.session_state.show_spanish = False
+                st.success("Flashcards ready! The deck is randomized from Gemini.")
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
