@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Volume2, ChevronLeft, ChevronRight, Moon, Sun, Loader2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Volume2, ChevronLeft, ChevronRight, Moon, Sun, Shuffle } from 'lucide-react';
 
 const flashcardsData = [
   // Agreement/Disagreement focus (A mí / Yo)
@@ -15,7 +15,7 @@ const flashcardsData = [
   { es: "A Pablo le duele la cabeza. - A mí también.", en: "Pablo's head hurts. - Mine too.", pt: "O Pablo está com dor de cabeça. - Eu também." },
   { es: "No hablo ruso. - Yo tampoco.", en: "I don't speak Russian. - Me neither.", pt: "Não falo russo. - Eu também não." },
   { es: "A Marcos no le gusta viajar. - A Luisa tampoco.", en: "Marcos doesn't like to travel. - Luisa doesn't either.", pt: "O Marcos não gosta de viajar. - A Luisa também não." },
-  { es: "Tengo calor. - Yo nos.", en: "I'm hot. - I'm not.", pt: "Estou com calor. - Eu não." },
+  { es: "Tengo calor. - Yo no.", en: "I'm hot. - I'm not.", pt: "Estou com calor. - Eu não." },
   { es: "No estoy cansada. - Nosotros sí.", en: "I'm not tired. - We are.", pt: "Não estou cansada. - Nós estamos." },
   { es: "A Esteban no le gusta el deporte. - Pues a Alba sí.", en: "Esteban doesn't like sports. - Well, Alba does.", pt: "O Esteban não gosta de esportes. - Bem, a Alba gosta." },
   { es: "A Sergio le encanta viajar. - Pues a Gema no.", en: "Sergio loves to travel. - Well, Gema doesn't.", pt: "O Sergio adora viajar. - Bem, a Gema não." },
@@ -106,87 +106,25 @@ const flashcardsData = [
   { es: "Aún es de noche.", en: "It's still nighttime.", pt: "Ainda é noite." }
 ];
 
-function pcmToWav(pcm16, sampleRate) {
-  const buffer = new ArrayBuffer(44 + pcm16.length * 2);
-  const view = new DataView(buffer);
-  
-  function writeString(view, offset, string) {
-    for (let i = 0; i < string.length; i++) {
-      view.setUint8(offset + i, string.charCodeAt(i));
-    }
-  }
-
-  writeString(view, 0, 'RIFF');
-  view.setUint32(4, 36 + pcm16.length * 2, true);
-  writeString(view, 8, 'WAVE');
-  writeString(view, 12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeString(view, 36, 'data');
-  view.setUint32(40, pcm16.length * 2, true);
-
-  for (let i = 0; i < pcm16.length; i++) {
-    view.setInt16(44 + i * 2, pcm16[i], true);
-  }
-  return new Blob([buffer], { type: 'audio/wav' });
-}
-
 export default function App() {
+  const [cards, setCards] = useState(flashcardsData);
   const [index, setIndex] = useState(0);
-  const [showSpanish, setShowSpanish] = useState(false); 
+  const [showSpanish, setShowSpanish] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    document.documentElement.className = darkMode ? 'dark' : '';
-  }, [darkMode]);
-
-  const handleSpeech = async () => {
-    setIsLoading(true);
-    try {
-      const payload = {
-        contents: [{ parts: [{ text: `Say in a clear, natural Spanish from Spain accent: ${flashcardsData[index].es}` }] }],
-        generationConfig: {
-          responseModalities: ["AUDIO"],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } } }
-        },
-        model: "gemini-2.5-flash-preview-tts"
-      };
-
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
-      const part = result?.candidates?.[0]?.content?.parts?.[0];
-      const audioData = part?.inlineData?.data;
-      const mimeType = part?.inlineData?.mimeType;
-
-      if (audioData && mimeType) {
-        const sampleRate = parseInt(mimeType.match(/rate=(\d+)/)[1], 10);
-        const binaryString = atob(audioData);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-        const pcm16 = new Int16Array(bytes.buffer);
-        const wavBlob = pcmToWav(pcm16, sampleRate);
-        const audioUrl = URL.createObjectURL(wavBlob);
-        new Audio(audioUrl).play();
-      }
-    } catch (error) {
-      console.error("TTS Error:", error);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleSpeech = (text) => {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text ?? cards[index].es);
+    utterance.lang = 'es-ES';
+    const spanishVoice = window.speechSynthesis
+      .getVoices()
+      .find((v) => v.lang.startsWith('es'));
+    if (spanishVoice) utterance.voice = spanishVoice;
+    window.speechSynthesis.speak(utterance);
   };
 
   const toggleCard = () => {
-    if (!showSpanish) { 
+    if (!showSpanish) {
       handleSpeech();
     }
     setShowSpanish(!showSpanish);
@@ -194,19 +132,30 @@ export default function App() {
 
   const nextCard = () => {
     setShowSpanish(false);
-    setIndex((prev) => (prev + 1) % flashcardsData.length);
+    setIndex((prev) => (prev + 1) % cards.length);
   };
 
   const prevCard = () => {
     setShowSpanish(false);
-    setIndex((prev) => (prev - 1 + flashcardsData.length) % flashcardsData.length);
+    setIndex((prev) => (prev - 1 + cards.length) % cards.length);
+  };
+
+  const shuffleDeck = () => {
+    const shuffled = [...cards];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    setCards(shuffled);
+    setIndex(0);
+    setShowSpanish(false);
   };
 
   return (
     <div className={`min-h-screen transition-colors duration-300 p-4 flex flex-col items-center ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
       
       <div className="w-full max-w-lg flex justify-between items-center mb-8">
-        <h1 className="text-xl font-bold">100 Flashcards ES</h1>
+        <h1 className="text-xl font-bold">{cards.length} Flashcards ES</h1>
         <button 
           onClick={() => setDarkMode(!darkMode)}
           className={`p-2 rounded-full transition-all ${darkMode ? 'bg-gray-800 text-yellow-400' : 'bg-white text-gray-600 shadow-md'}`}
@@ -222,11 +171,11 @@ export default function App() {
       >
         <div className="text-center">
           {showSpanish ? (
-            <p className="text-2xl font-bold">{flashcardsData[index].es}</p>
+            <p className="text-2xl font-bold">{cards[index].es}</p>
           ) : (
             <div className="space-y-4">
-              <p className="text-xl font-medium">{flashcardsData[index].en}</p>
-              <p className="text-lg text-gray-500 italic">{flashcardsData[index].pt}</p>
+              <p className="text-xl font-medium">{cards[index].en}</p>
+              <p className="text-lg text-gray-500 italic">{cards[index].pt}</p>
             </div>
           )}
         </div>
@@ -237,36 +186,40 @@ export default function App() {
       </div>
 
       <div className="w-full max-w-lg mt-8 space-y-6">
-        <input 
-          type="range" 
-          min="0" 
-          max={flashcardsData.length - 1} 
-          value={index} 
+        <input
+          type="range"
+          min="0"
+          max={cards.length - 1}
+          value={index}
           onChange={(e) => {setIndex(parseInt(e.target.value)); setShowSpanish(false);}}
           className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-blue-200 accent-blue-600"
         />
 
         <div className="flex justify-between items-center">
-          <button onClick={prevCard} className={`p-3 rounded-full ${darkMode ? 'bg-gray-800' : 'bg-white shadow'}`}>
+          <button onClick={prevCard} aria-label="Previous card" className={`p-3 rounded-full ${darkMode ? 'bg-gray-800' : 'bg-white shadow'}`}>
             <ChevronLeft />
           </button>
-          
-          <button 
-            onClick={handleSpeech}
-            disabled={isLoading}
-            className="p-4 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition disabled:opacity-50"
-          >
-            {isLoading ? <Loader2 className="animate-spin" /> : <Volume2 />}
+
+          <button onClick={shuffleDeck} aria-label="Shuffle deck" className={`p-3 rounded-full ${darkMode ? 'bg-gray-800' : 'bg-white shadow'}`}>
+            <Shuffle size={20} />
           </button>
 
-          <button onClick={nextCard} className={`p-3 rounded-full ${darkMode ? 'bg-gray-800' : 'bg-white shadow'}`}>
+          <button
+            onClick={() => handleSpeech()}
+            aria-label="Listen"
+            className="p-4 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition"
+          >
+            <Volume2 />
+          </button>
+
+          <button onClick={nextCard} aria-label="Next card" className={`p-3 rounded-full ${darkMode ? 'bg-gray-800' : 'bg-white shadow'}`}>
             <ChevronRight />
           </button>
         </div>
       </div>
 
       <p className={`mt-6 font-mono text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-        {index + 1} / {flashcardsData.length}
+        {index + 1} / {cards.length}
       </p>
     </div>
   );
