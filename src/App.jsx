@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Volume2, ChevronLeft, ChevronRight, Moon, Sun, Shuffle } from 'lucide-react';
 
 const flashcardsData = [
@@ -111,16 +111,32 @@ export default function App() {
   const [index, setIndex] = useState(0);
   const [showSpanish, setShowSpanish] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [voices, setVoices] = useState([]);
+
+  // Browsers load the voice list asynchronously; without this the first
+  // speak() call can run with an empty list and stay silent.
+  useEffect(() => {
+    const synth = window.speechSynthesis;
+    const loadVoices = () => setVoices(synth.getVoices());
+    loadVoices();
+    synth.addEventListener('voiceschanged', loadVoices);
+    return () => synth.removeEventListener('voiceschanged', loadVoices);
+  }, []);
+
+  const spanishVoice = voices.find((v) => v.lang.toLowerCase().startsWith('es'));
 
   const handleSpeech = (text) => {
-    window.speechSynthesis.cancel();
+    const synth = window.speechSynthesis;
+    synth.cancel();
     const utterance = new SpeechSynthesisUtterance(text ?? cards[index].es);
     utterance.lang = 'es-ES';
-    const spanishVoice = window.speechSynthesis
-      .getVoices()
-      .find((v) => v.lang.startsWith('es'));
-    if (spanishVoice) utterance.voice = spanishVoice;
-    window.speechSynthesis.speak(utterance);
+    // Without an explicit voice, requesting an uninstalled language
+    // plays nothing at all on Windows — fall back to any voice.
+    const voice = spanishVoice ?? voices.find((v) => v.default) ?? voices[0];
+    if (voice) utterance.voice = voice;
+    utterance.rate = 0.9;
+    // Chrome can silently drop speak() when called in the same tick as cancel()
+    setTimeout(() => synth.speak(utterance), 50);
   };
 
   const toggleCard = () => {
@@ -217,6 +233,13 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {voices.length > 0 && !spanishVoice && (
+        <p className={`mt-4 max-w-lg text-center text-xs ${darkMode ? 'text-amber-400' : 'text-amber-600'}`}>
+          ⚠️ No Spanish voice installed — audio uses the system default voice.
+          For proper pronunciation add one: Windows Settings → Time &amp; Language → Speech → Add voices → Spanish.
+        </p>
+      )}
 
       <p className={`mt-6 font-mono text-sm ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
         {index + 1} / {cards.length}
